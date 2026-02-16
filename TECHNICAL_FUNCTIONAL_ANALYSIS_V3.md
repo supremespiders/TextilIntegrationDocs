@@ -1,8 +1,8 @@
 # WinTech Textile Production Features
-## Technical and Functional Analysis - V3
+## Technical and Functional Analysis - V2
 
-**Document Version:** 3.0
-**Date:** February 14, 2026
+**Document Version:** 2.0
+**Date:** February 16, 2026
 **Based on:** Client Specification V2 (revised February 2026)
 
 > **Reading guide:** Items marked with <mark>yellow highlight</mark> represent **changes or additions introduced in specification V2**. Time estimates are also highlighted where they have changed.
@@ -28,7 +28,7 @@ This document provides the technical and functional analysis for extending WinTe
 
 **Technology:** .NET Framework 4.8 (no upgrade required)
 
-**Estimated Total Effort:** ~<mark>48</mark>-<mark>58</mark> person-days
+**Estimated Total Effort:** ~<mark>57</mark>-<mark>68</mark> person-days
 
 ---
 
@@ -125,7 +125,7 @@ Physical barcode labels ("talons") for textile operators who don't have PC acces
 - **Content:**
   - BDC Number + Client
   - Operation Name + Code
-  - Barcode (<mark>unique operation instance ID — unique within the BDC, not globally</mark>)
+  - Barcode (<mark>encodes `BdcWorkflowOperation.Id` — globally unique DB primary key, uniquely identifies the exact operation instance on the exact BDC when scanned</mark>)
   - Calculated Time
   - Generation Date
 
@@ -140,8 +140,7 @@ Physical barcode labels ("talons") for textile operators who don't have PC acces
 **FR-TAL-02: Talon Scanning Interface**
 - New WinTech form for supervisor
 - Scan barcode → Display operation info
-- <mark>Multiple operators may be assigned to the same Post; operator identified by Matricule</mark>
-- Select worker (by Matricule or name) from dropdown
+- Select worker from dropdown (by name)
 - Click Complete → Mark operation done, assign worker
 - Recent completions list for verification
 
@@ -159,12 +158,10 @@ Physical barcode labels ("talons") for textile operators who don't have PC acces
   - <mark>Manually mark a skipped operation as completed (retroactively)</mark>
   - <mark>Assign a worker to the manually completed operation</mark>
 
-<mark>**FR-TAL-05: Personnel Management (NEW)**</mark>
-- <mark>WinTech must manage a personnel database for operators</mark>
-- <mark>Each operator is identified by: Matricule, FirstName, LastName, IsActive flag</mark>
-- <mark>Operators are managed via the existing User entity (new fields added)</mark>
-- <mark>A same Post can have multiple operators (identified individually by Matricule)</mark>
-- <mark>Worker dropdown in scanning interface uses Matricule + Name display</mark>
+<mark>**FR-TAL-05: Personnel Fields (NEW)**</mark>
+- <mark>User entity extended with: Matricule, FirstName, LastName, IsActive — to support future operator identification</mark>
+- <mark>Personnel management form (CRUD) added to configuration</mark>
+- **Badge scanning / Matricule-based worker selection in scanning interface: DEFERRED** (future iteration once textile line is live and badge readers are in place)
 
 ---
 
@@ -224,7 +221,7 @@ Client Kwantum (KW) requires specific XML file exchanges for their fabric stock 
 **FR-KW-08: BDC Status Export**
 - Map internal statuses to KW codes (1-15)
 - XML export on schedule (existing Communicator mechanism)
-- <mark>All relevant statuses are exported (not filtered)</mark>
+- <mark>All active KW orders are included in the export regardless of their current status; each order's status is mapped to the KW code (1–15) per the mapping table</mark>
 
 **FR-KW-09: <mark>File Send Tracking (NEW)</mark>**
 - <mark>Each generated file (PI2S, SA2S, IC2S, GOMV, VOWV, Status) must be tracked in a dedicated log table</mark>
@@ -243,8 +240,9 @@ Print packaging labels with RFID tags for certain textile families during the Em
 #### 1.4.2 Functional Requirements
 
 **FR-RFID-01: RFID Enable Trigger**
-- <mark>RFID printing is **triggered by the Formula API result**, not by a Family-level boolean flag</mark>
-- <mark>The formula determines whether RFID is applicable for a given BDC/article combination</mark>
+- <mark>RFID printing applies to **suspended articles** only (Rideaux Suspendus family)</mark>
+- <mark>Determination is made in code by checking: (1) `bdc.Family` type is suspended, and (2) fabric quantity from `CalculatedSpecificField` — no Formula API call required</mark>
+- <mark>The "Print RFID" button on the packaging form is enabled/disabled based on this check</mark>
 
 **FR-RFID-02: RFID Number Generation**
 - Sequential counter (9-digit)
@@ -259,9 +257,83 @@ Print packaging labels with RFID tags for certain textile families during the Em
 - <mark>**2-label rule:** If the article's `nombre de cintres` (from CalculatedSpecificField) = 2, the system generates and prints **2 RFID labels** for that BDC</mark>
 
 **FR-RFID-04: Pending Client Information**
-- Printer model
-- Tag specifications (UHF/HF, memory, frequency)
-- Label template design
+- ~~Printer model~~ **Answered: Zebra ZT411**
+- ZPL label template (visual layout + RFID write command for the packaging label)
+
+---
+
+### <mark>1.5 Feature 5: Accessory Stock Management (NEW)</mark>
+
+#### <mark>1.5.1 Overview</mark>
+
+<mark>Accessories consumed by workflow operations will have their own stock management system, mirroring the existing FabricRoll stock model. Stock is reduced automatically when an operation that uses the accessory is completed, and follows the same main stock / temp stock / movement / overconsumption pattern as fabric.</mark>
+
+#### <mark>1.5.2 Functional Requirements</mark>
+
+<mark>**FR-ACC-01: Accessory Stock Entry**</mark>
+- <mark>Ability to enter accessory stock (manual entry or import — details TBD)</mark>
+- <mark>Stock organized into main stock and temp stock (same model as FabricRoll)</mark>
+
+<mark>**FR-ACC-02: Stock Reduction on Operation Completion**</mark>
+- <mark>When a workflow operation is marked complete, the calculated accessory quantities (`BdcWorkflowOperationAccessory.QuantityValue`) are deducted from stock</mark>
+- <mark>Follows the same stock movement logic as fabric cuts</mark>
+
+<mark>**FR-ACC-03: Overconsumption**</mark>
+- <mark>If actual quantity used exceeds calculated quantity, an overconsumption record is created</mark>
+- <mark>Same pattern as existing fabric overconsumption</mark>
+
+<mark>**FR-ACC-04: Stock Export**</mark>
+- <mark>Accessory stock movements exportable (format and trigger TBD — to be communicated by client)</mark>
+
+> <mark>**Note:** Detailed design (UI layout, movement types, export format) will be communicated by client. Scope confirmed; estimate based on parity with existing FabricRoll stock system.</mark>
+
+---
+
+### <mark>1.6 Feature 6: KW Textile Invoicing (NEW)</mark>
+
+#### <mark>1.6.1 Overview</mark>
+
+<mark>KW textile orders follow a different billing logic than KW technical orders. The existing `ImportedPrice` table (already in WinTech) holds prices imported from KW's official price files. For textile, these imported prices are the **billing base** — the inverse of technical invoicing where the internal matrix price is the base.</mark>
+
+#### <mark>1.6.2 Invoicing Logic Comparison</mark>
+
+| | Technical KW (existing) | <mark>Textile KW (new)</mark> |
+|---|---|---|
+| Billing base | Internal matrix price (PreInvoice) | <mark>Imported KW price (ImportedPrice)</mark> |
+| Reference / comparison | ImportedPrice | <mark>Internal matrix price (PreInvoice)</mark> |
+| Block if missing | No | <mark>Yes — invoicing blocked if no ImportedPrice found</mark> |
+
+#### <mark>1.6.3 Functional Requirements</mark>
+
+<mark>**FR-INV-01: Price Resolution**</mark>
+- <mark>For KW textile BDCs: billing price is looked up from `ImportedPrice` by article code (ProductPriceCode)</mark>
+- <mark>If no matching `ImportedPrice` found → invoicing is blocked with an explicit error message</mark>
+- <mark>Internal matrix prices (PreInvoice lines) are generated as a reference/comparison column only</mark>
+
+<mark>**FR-INV-02: Simulation (Reversed)**</mark>
+- <mark>Existing simulation for technical: shows Windeco matrix price and compares to imported client price</mark>
+- <mark>New simulation for KW textile: shows imported KW price as base and compares to the Windeco calculated price — reversed presentation</mark>
+
+<mark>**FR-INV-03: Invoice Report**</mark>
+- <mark>A KW-specific textile invoice report will extend or replace the existing `InvoiceKwantum` report</mark>
+- <mark>Report template design: **TBD — to be communicated by client**</mark>
+
+<mark>**FR-INV-04: XML Invoice (Communicator)**</mark>
+- <mark>A modified XML invoice file is sent to KW via Communicator</mark>
+- <mark>Each line includes: article price codes, unit prices, quantities</mark>
+- <mark>Exact XML format / example file: **TBD — to be communicated by client**</mark>
+- <mark>Sent via existing Communicator SFTP mechanism (new file type added)</mark>
+
+#### <mark>1.6.4 Notes on Existing Infrastructure</mark>
+
+- <mark>`ImportedPrice` entity already exists and is linked to BDC via `BdcId` and to `ProductPrice` via `ProductPriceId`</mark>
+- <mark>`InvoiceKwantum.cs` report class already exists — will be adapted for textile variant</mark>
+- <mark>KW client branch already present in `InvoiceService.cs` (ClientId 1 and 413) — textile switch will be added here based on Family type</mark>
+- <mark>No new DB table required; logic change only + new invoice report + new Communicator file type</mark>
+
+#### <mark>1.6.5 Open Items for Next Meeting</mark>
+
+- <mark>Highlight difference between technique invoice and textil invoice</mark>
 
 ---
 
@@ -407,7 +479,7 @@ Print packaging labels with RFID tags for certain textile families during the Em
 - Add: `RfidNumber` VARCHAR(20) NULL
 
 **Family**
-- Remove: ~~`EnableRfidPrinting` bool~~ <mark>(RFID now triggered by Formula API, not a flag)</mark>
+- <mark>No new field needed — RFID eligibility determined in code from existing Family type and CalculatedSpecificField</mark>
 
 <mark>**User** (UPDATED — personnel fields added)</mark>
 - <mark>Add: `Matricule` VARCHAR(50) NULL UNIQUE</mark>
@@ -456,8 +528,6 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 - Calculate operation time from BDC specific fields
 - Calculate operation order (sequence)
 - Calculate accessory consumption quantities
-- <mark>Return RFID enable decision per BDC (replaces Family-level flag)</mark>
-- <mark>Return nombre de cintres value (already in CalculatedSpecificField, used for 2-label rule)</mark>
 - Ensure performance scales with number of BDCs processed
 - Provide all needed context: specific fields, generic fields, fabric properties, accessory references
 
@@ -498,7 +568,7 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 
 | Form | Purpose |
 |------|---------|
-| Talon Scanning | Scan barcodes, assign workers (by Matricule), mark complete |
+| Talon Scanning | Scan barcodes, assign workers (by name), mark complete |
 | BDC Workflow Viewer | Read-only view of BDC's workflow instance |
 | NEV Import List | View NEV imports, status |
 | NEV Import Detail | Confrontation (over/under), validation, closure |
@@ -509,7 +579,7 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 | Form | Changes |
 |------|---------|
 | BDC Detail | Add: RFID number, "View Workflow" button |
-| Packaging Form | Add: "Print RFID" button (<mark>button enabled based on Formula API result, not family flag</mark>) |
+| Packaging Form | Add: "Print RFID" button (<mark>enabled based on in-code check: suspended family + fabric quantity from CalculatedSpecificField</mark>) |
 | Post Confirmation | Logic: mark operations complete in order (Technical dept — UI enforces sequence) |
 
 #### 2.3.4 New Reports
@@ -589,10 +659,13 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 
 ## 5. Questions for Client
 
-| # | Question | Impact |
-|---|----------|--------|
-| 1 | RFID printer model and tag specifications? | RFID implementation |
-| 2 | New fields needed on Client/Fabric/Product tables? | Database schema |
+| # | Question | Impact | Status |
+|---|----------|--------|--------|
+| 1 | RFID printer model? | RFID implementation | <mark>**Answered: Zebra ZT411**</mark> |
+| 1b | ZPL label template for the RFID packaging label (visual layout + RFID write command)? | RFID implementation | Pending |
+| 2 | New fields needed on Client/Fabric/Product tables? | Database schema | Pending |
+| 3 | KW Textile invoice XML format (example file)? | Feature 5 invoicing | Pending |
+| 4 | KW Textile invoice report layout/template? | Feature 5 invoice report | Pending |
 
 *Note: Formula configurations, status lists, and accessory lists will be configured by client admin during development.*
 
@@ -606,7 +679,7 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 |-------|-------------|-----------|
 | **Phase 1: Foundation** | Database schema, entity models, migrations (<mark>+User fields, +ClientFileSendLog, +StoreRodCounter, +IsAutoCompleted</mark>) | <mark>3</mark> |
 | **Phase 2: Workflow Core** | WorkflowService, workflow instantiation, completion logic, <mark>skip rule & auto-complete logic</mark> | <mark>6</mark> |
-| **Phase 3: Formula Integration** | Formula API adjustments, operation calculation, <mark>RFID trigger formula, cintres formula</mark> | <mark>3</mark> |
+| **Phase 3: Formula Integration** | Formula API adjustments, operation calculation (time, order, accessories) | <mark>3</mark> |
 | **Phase 4: Config UI** | Operations catalog, Family workflow config, <mark>Personnel management form</mark> | <mark>5</mark> |
 | **Phase 5: Talon System** | Talon report (<mark>scanline order</mark>), scanning interface (<mark>Matricule-based worker selection</mark>), <mark>Anomaly View form</mark> | <mark>5</mark> |
 | **Phase 6: Post Confirmation** | Modify confirmation flow for operations (Technical dept, enforced order) | <mark>4</mark> |
@@ -616,8 +689,10 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 | **Phase 10: Testing** | Integration testing, UAT support | <mark>5</mark> |
 | **Phase 11: Reports** | Worker performance, operation summary | <mark>4</mark> |
 | **Phase 12: Deployment** | Migration, deployment, hypercare | <mark>2</mark> |
+| <mark>**Phase 13: Accessory Stock Management**</mark> | <mark>Stock entry, stock reduction on operation completion, overconsumption, movements, export (details TBD)</mark> | <mark>3</mark> |
+| <mark>**Phase 14: KW Textile Invoicing**</mark> | <mark>Billing logic switch (textile vs technical), block guard, simulation reversal, invoice report (once template received), XML invoice via Communicator (once format received)</mark> | <mark>3</mark> |
 
-**Total: ~<mark>51</mark> person-days**
+**Total: ~<mark>57</mark> person-days**
 
 ### 6.2 Priority Order
 
@@ -630,9 +705,9 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 ### 6.3 Timeline Estimate
 
 **With 1 developer:**
-- ~<mark>51</mark> working days
+- ~<mark>57</mark> working days
 
-**With contingency (20%):** ~<mark>61</mark> days
+**With contingency (20%):** ~<mark>68</mark> days
 
 ---
 
@@ -645,7 +720,9 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 | Workflow/Operations System | All families, core architecture change | LARGE (<mark>15 days</mark>) |
 | Talon System (<mark>+ Anomaly View</mark>) | Textile department, printing + scanning + anomaly management | MEDIUM (<mark>13 days</mark>) |
 | KW Integration (<mark>+ file dedup + trigger file</mark>) | One client, XML files | MEDIUM (<mark>11 days</mark>) |
-| RFID Printing (<mark>formula-driven, 2-label rule</mark>) | Some textile families | SMALL (<mark>3 days</mark>) |
+| RFID Printing (<mark>code-driven check, 2-label rule, Zebra ZT411</mark>) | Suspended textile articles | SMALL (<mark>3 days</mark>) |
+| <mark>Accessory Stock Management</mark> | <mark>All families using accessories</mark> | <mark>SMALL (3 days — details TBD)</mark> |
+| <mark>KW Textile Invoicing</mark> | <mark>KW client, textile orders</mark> | <mark>SMALL (3 days — details TBD)</mark> |
 | Supporting (config, reports, testing) | Various | MEDIUM (<mark>9 days</mark>) |
 
 ### 7.2 What We're NOT Building (Deferred)
@@ -654,7 +731,7 @@ GetAutoCompletedOperations(bdcWorkflowId) → List<BdcWorkflowOperation>  [NEW]
 - Aléas (production incidents)
 - Operations not linked to BDC
 - Performance calculation formula
-- Accessory stock management (beyond existing)
+- ~~Accessory stock management (beyond existing)~~ <mark>NOW IN SCOPE — see Feature 5</mark>
 - <mark>Stock Photo (weekly snapshot) — moved to future phase</mark>
 
 ### 7.3 Key Success Criteria
@@ -718,7 +795,7 @@ The following items are new or updated relative to V1 specification:
 
 | # | Change | Section |
 |---|--------|---------|
-| 1 | Barcode ID is unique per BDC (not globally unique) | FR-TAL (talon content) |
+| 1 | Barcode encodes BdcWorkflowOperation.Id (globally unique PK) | FR-TAL (talon content) |
 | 2 | Talon print order follows scanline / row-major logic | FR-TAL-01 |
 | 3 | Skipped operations do NOT block status in textile workflow | FR-TAL-04 |
 | 4 | Auto-completed skipped ops: PostId=NULL, CompletedAt=NULL | FR-TAL-04 |
@@ -731,11 +808,13 @@ The following items are new or updated relative to V1 specification:
 | 11 | File deduplication rule: each file sent only once per cycle | FR-KW-09 |
 | 12 | New table: ClientFileSendLog (structured file send tracking) | FR-KW-09, DB schema |
 | 13 | Stock Photo: DEFERRED to future phase | FR-KW-06 |
-| 14 | RFID trigger: via Formula API result, not Family.EnableRfidPrinting flag | FR-RFID-01 |
+| 14 | RFID trigger: in-code check (suspended Family + fabric quantity CalculatedSpecificField) — no Formula API | FR-RFID-01 |
 | 15 | RFID counter: configure starting number to align with Winsat legacy counter | FR-RFID-02 |
 | 16 | 2 RFID labels printed if article's nombre de cintres = 2 | FR-RFID-03 |
 | 17 | VOWV: applies to ALL non-suspended textile orders (not only Stores Bateaux) | FR-KW-07 |
 | 18 | Rod number: sequential counter per Store entity (not global) | FR-KW-07 |
+| 19 | <mark>Feature 5 added: Accessory Stock Management — main/temp stock, reduction on operation completion, overconsumption, movements, export</mark> | FR-ACC-01 to 04 |
+| 20 | <mark>Feature 6 added: KW Textile Invoicing — billing base = ImportedPrice, simulation reversed vs technical, block if no price found</mark> | FR-INV-01 to 04 |
 
 ---
 
