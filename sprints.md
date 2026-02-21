@@ -362,32 +362,6 @@
 
 ---
 
-## Deferred (Out of Scope for This Release)
-
-| Item | Reason |
-|------|--------|
-| Stock Photo (weekly KW snapshot) | Moved to future phase |
-| Performance calculation formula | Future iteration |
-| Badge scanning / Matricule-based worker selection in scanning | Deferred until textile line is live and badge readers are in place |
-| SWIBTIME integration | Not in scope |
-| Aléas (production incidents) | Not in scope |
-| Operations not linked to BDC | Not in scope |
-
----
-
-## Open Items (Blocking or Pending)
-
-| # | Item | Blocking |
-|---|------|---------|
-| 1 | ZPL label template for Zebra ZT411 RFID packaging label | Sprint 5 — RFID label printing |
-| 2 | KW Textile invoice XML format (example file) | Sprint 7 — FR-INV-04 |
-| 3 | KW Textile invoice report layout/template | Sprint 7 — FR-INV-03 |
-| 4 | Accessory stock UI layout, movement types, export format | Sprint 7 — FR-ACC |
-| 5 | Winsat legacy RFID counter end value | Sprint 5 — RFID counter start config |
-| 6 | New fields needed on Client/Fabric/Product tables (if any) | Sprint 1 — DB schema |
-
----
-
 ## Key Success Criteria
 
 1. Textile production runs with talon-based barcode workflow
